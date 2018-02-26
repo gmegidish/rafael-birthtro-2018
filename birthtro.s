@@ -53,6 +53,8 @@ ptr:      .res 2
 delay:    .res 1
 scroll_y: .res 1
 
+frame_counter: .res 1
+
 .segment "RODATA"
 
 
@@ -68,6 +70,33 @@ palette:
 
 	.byt $07, $0c, $38, $16			; sprite palette 2
 	.byt $05, $00, $01, $02			; sprite palette 3
+
+sinus:
+	; sin(2 * x * 3.14 / 180) * 16
+	; 0 < x < 180
+	.byt $00, $01, $01, $02, $02, $03, $03
+	.byt $04, $04, $05, $05, $06, $07, $07, $07
+	.byt $08, $08, $09, $09, $0a, $0a, $0b, $0b
+	.byt $0b, $0c, $0c, $0c, $0d, $0d, $0d, $0e
+	.byt $0e, $0e, $0e, $0f, $0f, $0f, $0f, $0f
+	.byt $0f, $0f, $0f, $0f, $0f, $0f, $0f, $0f
+	.byt $0f, $0f, $0f, $0f, $0f, $0f, $0f, $0f
+	.byt $0e, $0e, $0e, $0e, $0d, $0d, $0d, $0c
+	.byt $0c, $0c, $0b, $0b, $0b, $0a, $0a, $09
+	.byt $09, $08, $08, $08, $07, $07, $06, $06
+	.byt $05, $04, $04, $03, $03, $02, $02, $01
+	.byt $01, $00, $00, $00, $ff, $ff, $fe, $fe
+	.byt $fd, $fd, $fc, $fc, $fb, $fb, $fa, $fa
+	.byt $f9, $f9, $f8, $f8, $f7, $f7, $f6, $f6
+	.byt $f5, $f5, $f5, $f4, $f4, $f4, $f3, $f3
+	.byt $f3, $f2, $f2, $f2, $f2, $f1, $f1, $f1
+	.byt $f1, $f1, $f1, $f1, $f1, $f1, $f1, $f1
+	.byt $f1, $f1, $f1, $f1, $f1, $f1, $f1, $f1
+	.byt $f1, $f1, $f2, $f2, $f2, $f2, $f3, $f3
+	.byt $f3, $f4, $f4, $f4, $f5, $f5, $f5, $f6
+	.byt $f6, $f7, $f7, $f8, $f8, $f8, $f9, $f9
+	.byt $fa, $fa, $fb, $fc, $fc, $fd, $fd, $fe
+	.byt $fe, $ff, $ff, $00
 
 palette2:
 	.incbin "palette.pal"
@@ -99,6 +128,7 @@ reset:
 
 	sta delay
 	sta scroll_y
+	sta frame_counter
 
 	ldx #$ff
 	txs			; initialize stack pointer
@@ -136,19 +166,6 @@ copy_palette:
 	bne :-
 	rts
 
-	render_background1:
-        	ldx #$20
-        	stx PPU_ADDR
-        	ldx #$00
-        	stx PPU_ADDR
-
-        	ldx #$00
-        :	stx PPU_DATA
-        	inx
-        	bne :-
-
-        	rts
-
 render_background:
 
 	ldx #$20		; copy the first 1024 bytes from name_table into $2000
@@ -181,25 +198,22 @@ vblank:
 endless_loop:
 
 	jsr vblank
-	jmp endless_loop
 
-	lda #$0
-	sta PPU_SCROLL
-	lda #$f0
-	sta PPU_SCROLL
-	jmp endless_loop
+	inc frame_counter
 
-	dec scroll_y
-	lda scroll_y
-	sta PPU_SCROLL
-	lda #$0
+	lda frame_counter
+	cmp #179
+	bne :+
+	lda #$00
+	sta frame_counter
 
-	lda scroll_y
-	lsr
-	lsr
-	lsr
-
-	sta PPU_SCROLL
+:	ldx frame_counter
+	lda sinus,x
+	clc
+	adc #256-16
+	sta PPU_SCROLL		; x scroll
+	lda #$00
+	sta PPU_SCROLL		; y scroll
 
 	jmp endless_loop
 
