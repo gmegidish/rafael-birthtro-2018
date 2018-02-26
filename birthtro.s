@@ -49,10 +49,12 @@ SPR_ON          = %10000    ; Show sprites.
 
 .segment "ZEROPAGE"
 
+ptr:      .res 2
 delay:    .res 1
 scroll_y: .res 1
 
 .segment "RODATA"
+
 
 palette:
 	.byt $07, $0c, $38, $16			; palette 0
@@ -67,8 +69,22 @@ palette:
 	.byt $07, $0c, $38, $16			; sprite palette 2
 	.byt $05, $00, $01, $02			; sprite palette 3
 
+palette2:
+	.incbin "palette.pal"
+	.incbin "palette.pal"
+	;.incbin "rafael-face-palette"
+
+name_table:
+	.incbin "tileset.nam"
+
+spritelist:
+	;.incbin "rafael-face-spritelist"
+
 .segment "PATTERN0"
-	.incbin "tileset.chr"
+	.incbin  "tileset.chr"
+
+.segment "PATTERN1"
+	;.incbin "rafael-face-chr"
 
 .segment "CODE"
 
@@ -92,14 +108,19 @@ reset:
 
 	jsr copy_palette
 	jsr render_background
+	;jsr copy_sprites
 
         lda #VBLANK_NMI|BG_0|SPR_0|NT_0|VRAM_RIGHT
+        ;|SPR_8x16
 	sta PPU_CTRL
 
 	lda #BG_ON|SPR_ON
 	sta PPU_MASK
 
 	jmp endless_loop
+
+copy_sprites:
+	rts
 
 copy_palette:
 	lda #$3f		; set ppu_addr to $3f00 (palette)
@@ -115,16 +136,39 @@ copy_palette:
 	bne :-
 	rts
 
+	render_background1:
+        	ldx #$20
+        	stx PPU_ADDR
+        	ldx #$00
+        	stx PPU_ADDR
+
+        	ldx #$00
+        :	stx PPU_DATA
+        	inx
+        	bne :-
+
+        	rts
+
 render_background:
 
-	ldx #$20
+	ldx #$20		; copy the first 1024 bytes from name_table into $2000
 	stx PPU_ADDR
 	ldx #$00
 	stx PPU_ADDR
 
-	ldx #$00
-:	stx PPU_DATA
-	inx
+	lda #<name_table	; src pointer
+	sta ptr+0
+	lda #>name_table
+	sta ptr+1
+
+	ldx #4			; 4 x 256 bytes
+	ldy #0
+:	lda (ptr),y
+	sta PPU_DATA
+	iny
+	bne :-
+	inc ptr+1
+	dex
 	bne :-
 
 	rts
@@ -137,11 +181,24 @@ vblank:
 endless_loop:
 
 	jsr vblank
+	jmp endless_loop
+
+	lda #$0
+	sta PPU_SCROLL
+	lda #$f0
+	sta PPU_SCROLL
+	jmp endless_loop
 
 	dec scroll_y
 	lda scroll_y
 	sta PPU_SCROLL
 	lda #$0
+
+	lda scroll_y
+	lsr
+	lsr
+	lsr
+
 	sta PPU_SCROLL
 
 	jmp endless_loop
