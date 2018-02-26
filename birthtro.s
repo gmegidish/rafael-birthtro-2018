@@ -1,12 +1,17 @@
 
-PPU_CTRL        = $2000
-PPU_MASK        = $2001
-PPU_STATUS      = $2002
-PPU_SCROLL      = $2005
-PPU_ADDR        = $2006
-PPU_DATA        = $2007
-APU_DMC_CTRL    = $4010
-APU_CHAN_CTRL   = $4015
+PPU_CTRL	= $2000
+PPU_MASK	= $2001
+PPU_STATUS	= $2002
+PPU_SCROLL	= $2005
+PPU_ADDR	= $2006
+PPU_DATA	= $2007
+
+OAM_ADDR	= $2003
+OAM_DATA	= $2004
+OAM_DMA		= $4014
+
+APU_DMC_CTRL	= $4010
+APU_CHAN_CTRL	= $4015
 
 ; NOTE: Many of these are expressed in binary,
 ; to highlight which bit(s) they pertain to:
@@ -37,7 +42,6 @@ BG_ON           = %1000     ; Show background.
 SPR_OFF         = %00000    ; Hide sprites.
 SPR_ON          = %10000    ; Show sprites.
 
-
 .segment "INESHDR"
 	.byt "NES",$1A
 	.byt 1 				; 1 x 16kB PRG block.
@@ -55,21 +59,26 @@ scroll_y: .res 1
 
 frame_counter: .res 1
 
+.segment "BSS"
+
+spritelist: .res 256				; must be aligned to $ff00
+
 .segment "RODATA"
 
-
 palette:
-	.byt $07, $0c, $38, $16			; palette 0
-	.byt $05, $00, $01, $02			; palette 1
+	.byt $05				; global background color ($3f00)
 
-	.byt $07, $0c, $38, $16			; palette 2
-	.byt $05, $00, $01, $02			; palette 3
+	.byt $0c, $38, $16, $05			; palette 0 ($3f01-$3f03)
+	.byt $00, $00, $00, $05			; palette 1 ($3f05-$3f07)
+	.byt $00, $00, $00, $05			; palette 2 ($3f09-$3f0b)
+	.byt $00, $00, $00, $05			; palette 3 ($3f0d-$3f0f)
 
-	.byt $07, $0c, $38, $16			; sprite palette 0
-	.byt $05, $00, $01, $02			; sprite palette 1
+	.byt $00				; global sprite background ($3f10)
+	.byt $0f, $2d, $3d, $05			; sprite palette 0 ($3f11-$3f13)
+	.byt $00, $00, $00, $05			; sprite palette 1 ($3f15-$3f17)
+	.byt $00, $00, $00, $05			; sprite palette 2 ($3f19-$3f1b)
+	.byt $00, $00, $00, $05			; sprite palette 3 ($3f1d-$3f1f)
 
-	.byt $07, $0c, $38, $16			; sprite palette 2
-	.byt $05, $00, $01, $02			; sprite palette 3
 
 sinus:
 	; sin(2 * x * 3.14 / 180) * 16
@@ -98,22 +107,17 @@ sinus:
 	.byt $fa, $fa, $fb, $fc, $fc, $fd, $fd, $fe
 	.byt $fe, $ff, $ff, $00
 
-palette2:
-	.incbin "palette.pal"
-	.incbin "palette.pal"
-	;.incbin "rafael-face-palette"
-
 name_table:
 	.incbin "tileset.nam"
 
-spritelist:
-	;.incbin "rafael-face-spritelist"
+rom_spritelist:
+	.incbin "rafael-face-spritelist"
 
 .segment "PATTERN0"
 	.incbin  "tileset.chr"
 
 .segment "PATTERN1"
-	;.incbin "rafael-face-chr"
+	.incbin "rafael-face-chr"
 
 .segment "CODE"
 
@@ -136,20 +140,36 @@ reset:
 	bit PPU_STATUS		; ack vblank nmi
 	bit APU_CHAN_CTRL	; ack dmc irq
 
+	jsr copy_sprites_to_ram
+
+	jsr copy_sprites
 	jsr copy_palette
 	jsr render_background
-	;jsr copy_sprites
 
-        lda #VBLANK_NMI|BG_0|SPR_0|NT_0|VRAM_RIGHT
-        ;|SPR_8x16
+        lda #VBLANK_NMI|BG_0|SPR_0|NT_0|VRAM_RIGHT|SPR_8x16
 	sta PPU_CTRL
 
-	lda #BG_ON|SPR_ON
+	lda #BG_ON|SPR_ON|SHOW_BG_LHS|SHOW_SPR_LHS
 	sta PPU_MASK
 
 	jmp endless_loop
 
+copy_sprites_to_ram:
+
+	ldx #$0			; copy spritelist to ram, so we can use DMA
+:	lda rom_spritelist,x
+	sta spritelist,x
+	inx
+	bne :-
+	rts
+
 copy_sprites:
+
+	lda #$0			; start writing from sprite 0
+	sta OAM_ADDR
+
+	lda #>spritelist
+	sta OAM_DMA
 	rts
 
 copy_palette:
@@ -195,19 +215,36 @@ vblank:
 	bpl vblank		; 7th bit on = we're in vblank
 	rts
 
-endless_loop:
+move_sprites:
+	ldx #$0
+:	inc spritelist,x
+	inx
+	inx
+	inx
+	inx
+	bne :-
+	rts
 
-	jsr vblank
-
+increase_frame_counter:
 	inc frame_counter
-
 	lda frame_counter
 	cmp #179
-	bne :+
+	bcc :+
 	lda #$00
 	sta frame_counter
+:	rts
 
-:	ldx frame_counter
+endless_loop:
+
+	; stuff that can be done during render
+	jsr move_sprites
+	jsr increase_frame_counter
+
+	; stuff that can only be updated during a vblank
+	jsr vblank
+	jsr copy_sprites
+
+	ldx frame_counter
 	lda sinus,x
 	clc
 	adc #256-16
