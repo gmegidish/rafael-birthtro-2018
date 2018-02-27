@@ -53,9 +53,13 @@ SPR_ON          = %10000    ; Show sprites.
 
 .segment "ZEROPAGE"
 
-ptr:      .res 2
-delay:    .res 1
+ptr: .res 2
+delay: .res 1
 scroll_y: .res 1
+tmp: .res 1
+
+direction: .res 1				; speed*direction of moving face
+face_x: .res 1					; position of left topmost pixel
 
 frame_counter: .res 1
 
@@ -133,6 +137,10 @@ reset:
 	sta delay
 	sta scroll_y
 	sta frame_counter
+	sta face_x		; we start on the left
+
+	lda #2			; we start by moving right
+	sta direction
 
 	ldx #$ff
 	txs			; initialize stack pointer
@@ -215,9 +223,39 @@ vblank:
 	bpl vblank		; 7th bit on = we're in vblank
 	rts
 
-move_sprites:
+move_head:
+	clc
+	lda face_x
+	adc direction
+	sta face_x
+
+	bne :+
+	lda #2
+	sta direction
+	rts
+:	cmp #256-64
+	beq :+
+	rts
+:	lda #$fe
+	sta direction
+	rts
+
+update_sprites:
 	ldx #$0
-:	inc spritelist,x
+:	clc			; spr.x += direction
+	lda rom_spritelist+3,x
+	adc face_x
+	sta spritelist+3,x
+
+	stx tmp			; spr.y = original.y+sinus[frame_counter]
+	ldx frame_counter
+	lda sinus,x
+	asl
+	ldx tmp
+	clc
+	adc #80
+	adc rom_spritelist+0,x
+	sta spritelist+0,x
 	inx
 	inx
 	inx
@@ -237,7 +275,8 @@ increase_frame_counter:
 endless_loop:
 
 	; stuff that can be done during render
-	jsr move_sprites
+	jsr move_head
+	jsr update_sprites
 	jsr increase_frame_counter
 
 	; stuff that can only be updated during a vblank
