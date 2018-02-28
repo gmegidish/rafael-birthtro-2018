@@ -75,10 +75,11 @@ palette:
 	.byt $0c, $38, $16, $05			; palette 0 ($3f01-$3f03)
 	.byt $00, $00, $00, $05			; palette 1 ($3f05-$3f07)
 	.byt $00, $00, $00, $05			; palette 2 ($3f09-$3f0b)
-	.byt $00, $00, $00, $05			; palette 3 ($3f0d-$3f0f)
+	.byt $00, $00, $00 			; palette 3 ($3f0d-$3f0f)
 
 	.byt $05				; global sprite background ($3f10)
-	.byt $0f, $2d, $3d, $05			; sprite palette 0 ($3f11-$3f13)
+	.byt $0f, $3d, $2d, $05			; sprite palette 0 ($3f11-$3f13)
+	; 2d 3d 07 05
 	.byt $00, $00, $00, $05			; sprite palette 1 ($3f15-$3f17)
 	.byt $00, $00, $00, $05			; sprite palette 2 ($3f19-$3f1b)
 	.byt $00, $00, $00, $05			; sprite palette 3 ($3f1d-$3f1f)
