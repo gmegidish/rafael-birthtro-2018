@@ -5,7 +5,7 @@
 all: birthtro.nes
 
 clean:
-	@rm -fv birthtro.s birthtro.o birthtro.nes
+	@rm -fv birthtro.o birthtro.nes
 
 %.o: %.s
 	ca65 $<
