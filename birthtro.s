@@ -9,9 +9,9 @@ PPU_DATA	= $2007
 OAM_ADDR	= $2003
 OAM_DATA	= $2004
 OAM_DMA		= $4014
-
 APU_DMC_CTRL	= $4010
 APU_CHAN_CTRL	= $4015
+PPU_FRAMECNT	= $4017
 
 ; NOTE: Many of these are expressed in binary,
 ; to highlight which bit(s) they pertain to:
@@ -44,7 +44,7 @@ SPR_ON          = %10000    ; Show sprites.
 
 .segment "INESHDR"
 	.byt "NES",$1A
-	.byt 1 				; 1 x 16kB PRG block.
+	.byt 2 				; 1 x 16kB PRG block.
 	.byt 1 				; 1 x 8kB CHR block.
 	; Rest of iNES header defaults to 0, indicating mapper 0, standard RAM size, etc.
 
@@ -67,6 +67,11 @@ frame_counter: .res 1
 
 spritelist: .res 256				; must be aligned to $ff00
 
+.segment "MUSIC"
+	; https://www.zophar.net/music/nintendo-nes-nsf/time-zone
+	; interesting tracks: 2, 8, 4
+	.incbin "time_zone.nsf", $80	; music, without the header
+
 .segment "RODATA"
 
 palette:
@@ -79,7 +84,6 @@ palette:
 
 	.byt $05				; global sprite background ($3f10)
 	.byt $0f, $3d, $2d, $05			; sprite palette 0 ($3f11-$3f13)
-	; 2d 3d 07 05
 	.byt $00, $00, $00, $05			; sprite palette 1 ($3f15-$3f17)
 	.byt $00, $00, $00, $05			; sprite palette 2 ($3f19-$3f1b)
 	.byt $00, $00, $00, $05			; sprite palette 3 ($3f1d-$3f1f)
@@ -130,11 +134,21 @@ reset:
 	cld
 	sei			; disable interrupts
 
+	lda #$0f		; initial apu
+	sta APU_CHAN_CTRL
+
+	ldx #$ff		; initialize stack pointer
+	txs
+
 	lda #$00
 	sta PPU_CTRL		; nmi disabled
 	sta PPU_MASK		; disable video output
 	sta APU_DMC_CTRL	; disable dmc irq
 
+	ldx #$40		; set up frame counter before music
+	stx PPU_FRAMECNT
+
+	lda #$00
 	sta delay
 	sta scroll_y
 	sta frame_counter
@@ -142,9 +156,6 @@ reset:
 
 	lda #2			; we start by moving right
 	sta direction
-
-	ldx #$ff
-	txs			; initialize stack pointer
 
 	bit PPU_STATUS		; ack vblank nmi
 	bit APU_CHAN_CTRL	; ack dmc irq
@@ -160,6 +171,10 @@ reset:
 
 	lda #BG_ON|SPR_ON|SHOW_BG_LHS|SHOW_SPR_LHS
 	sta PPU_MASK
+
+	ldx #$0			; ntsc (if applicable)
+	lda #$1			; track #2
+	jsr $beb0		; init time zone nsf
 
 	jmp endless_loop
 
@@ -292,6 +307,8 @@ endless_loop:
 	lda #$00
 	sta PPU_SCROLL		; y scroll
 
+	jsr $8094			;play music
+
 	jmp endless_loop
 
 nmi_isr:
@@ -299,6 +316,7 @@ nmi_isr:
 
 irq_isr:
 	rti
+
 
 
 

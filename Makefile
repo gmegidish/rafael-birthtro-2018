@@ -11,5 +11,6 @@ clean:
 	ca65 $<
 
 %.nes: %.o
-	ld65 -C nes.cfg -o $@ $<
+	ld65 -C nes.cfg -o $@ $< -m map.txt
+	cat map.txt && rm map.txt
 
