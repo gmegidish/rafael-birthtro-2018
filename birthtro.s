@@ -53,17 +53,13 @@ SPR_ON          = %10000    ; Show sprites.
 
 .segment "ZEROPAGE"
 
-ptr: .res 2
-delay: .res 1
-scroll_y: .res 1
+ptr: .res 2					; used for copying
 tmp: .res 1
 
 direction_x: .res 1				; speed*direction of moving face
 direction_y: .res 1
-face_x: .res 1					; position of left topmost pixel
+face_x: .res 1					; position of head
 face_y: .res 1
-
-frame_counter: .res 1
 
 .segment "BSS"
 
@@ -77,24 +73,27 @@ spritelist: .res 256				; must be aligned to $ff00
 .segment "RODATA"
 
 palette:
-	.byt $05				; global background color ($3f00)
+	.byt $05, $0c, $38, $16			; palette 0
+	.byt $05, $00, $00, $00
+	.byt $05, $00, $00, $00
+	.byt $05, $00, $00, $00
 
-	.byt $0c, $38, $16, $05			; palette 0 ($3f01-$3f03)
-	.byt $00, $00, $00, $05			; palette 1 ($3f05-$3f07)
-	.byt $00, $00, $00, $05			; palette 2 ($3f09-$3f0b)
-	.byt $00, $00, $00 			; palette 3 ($3f0d-$3f0f)
+	.byt $05, $0f, $3d, $2d			; sprite palette 0
+	.byt $05, $00, $00, $00
+	.byt $05, $00, $00, $00
+	.byt $05, $00, $00, $00
 
-	.byt $05				; global sprite background ($3f10)
-	.byt $0f, $3d, $2d, $05			; sprite palette 0 ($3f11-$3f13)
-	.byt $00, $00, $00, $05			; sprite palette 1 ($3f15-$3f17)
-	.byt $00, $00, $00, $05			; sprite palette 2 ($3f19-$3f1b)
-	.byt $00, $00, $00, $05			; sprite palette 3 ($3f1d-$3f1f)
+text:
+	; 64+13 = taf (last character in hebrew)
+	; 64+13+26 = alef (first character in hebrew)
+	; see charset
+	.byt $4c, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $5b, $67, $53, $4f, $4c, $63, $61, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $00
+	.byt $4c, $4c, $4c, $4c, $4c, $4d, $64, $5b, $62, $63, $4c, $5a, $62, $5e, $4c, $62, $5b, $4c, $4e, $5e, $4c, $5a, $62, $5e, $63, $4c, $4c, $4c, $4c, $4c, $00
+	.byt $4c, $4c, $4c, $4c, $4c, $4c, $4c, $85, $8a, $8b, $83, $4c, $66, $4c, $62, $59, $5c, $4c, $5a, $5e, $65, $65, $62, $60, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $00
+	.byt $4c, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $5b, $67, $53, $4f, $4c, $66, $62, $5f, $4c, $5b, $61, $59, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $00
+	.byt $4c, $4d, $62, $5b, $62, $64, $65, $4c, $4d, $62, $67, $56, $53, $62, $50, $4c, $5b, $4e, $4c, $5a, $5e, $57, $4e, $4c, $63, $66, $4f, $63, $5b, $4c, $00
+	.byt $4c, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $63, $67, $66, $63, $4c, $63, $57, $4e, $66, $4c, $63, $67, $4f, $4d, $57, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $4c, $00
 
-
-sinus:
-	; sin(2 * x * 3.14 / 180) * 16
-	; 0 <= x < 180
-	.incbin "sinwave.dat"
 
 name_table:
 	.incbin "tileset.nam"
@@ -129,13 +128,10 @@ reset:
 	stx PPU_FRAMECNT
 
 	lda #$00
-	sta delay
-	sta scroll_y
-	sta frame_counter
 	sta face_y		; we start at the top
 	sta face_x		; we start on the left
 
-	lda #2			; we start by moving right
+	lda #1			; we start by moving right
 	sta direction_x
 	sta direction_y
 
@@ -155,7 +151,7 @@ reset:
 	sta PPU_MASK
 
 	ldx #$0			; ntsc (if applicable)
-	lda #$1			; track #2
+	lda #1			; track #2
 	jsr $beb0		; init time zone nsf
 
 	jmp endless_loop
@@ -173,7 +169,6 @@ copy_sprites:
 
 	lda #$0			; start writing from sprite 0
 	sta OAM_ADDR
-
 	lda #>spritelist
 	sta OAM_DMA
 	rts
@@ -227,13 +222,13 @@ move_head:
 	adc direction_x
 	sta face_x
 	bne :+
-	lda #2
+	lda #1
 	sta direction_x
 	jmp move_y
 :	cmp #256-64
 	beq :+
 	jmp move_y
-:	lda #256-2
+:	lda #256-1
 	sta direction_x
 
 move_y:	clc
@@ -241,13 +236,13 @@ move_y:	clc
 	adc direction_y
 	sta face_y
 	bne :+
-	lda #2
+	lda #1
 	sta direction_y
 	rts
 :	cmp #240-96
 	beq :+
 	rts
-:	lda #256-2
+:	lda #256-1
 	sta direction_y
 	rts
 
@@ -269,35 +264,38 @@ update_sprites:
 	bne :-
 	rts
 
-increase_frame_counter:
-	inc frame_counter
-	lda frame_counter
-	cmp #179
-	bcc :+
-	lda #$00
-	sta frame_counter
+write_text:
+	ldx #$23
+	stx PPU_ADDR
+	ldx #$80
+	stx PPU_ADDR
+	ldx #0
+:	lda text,x
+	beq :+
+	sta PPU_DATA
+	inx
+	jmp :-
 :	rts
 
+
 endless_loop:
+
+	jsr $8094		; play music
 
 	; stuff that can be done during render
 	jsr move_head
 	jsr update_sprites
-	jsr increase_frame_counter
 
 	; stuff that can only be updated during a vblank
 	jsr vblank
+
+	jsr write_text
+
 	jsr copy_sprites
 
-	ldx frame_counter
-	lda sinus,x
-	clc
-	adc #256-16
-	sta PPU_SCROLL		; x scroll
 	lda #$00
-	sta PPU_SCROLL		; y scroll
-
-	jsr $8094			;play music
+	sta PPU_SCROLL
+	sta PPU_SCROLL
 
 	jmp endless_loop
 
@@ -306,6 +304,8 @@ nmi_isr:
 
 irq_isr:
 	rti
+
+
 
 
 
