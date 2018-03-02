@@ -14,3 +14,6 @@ clean:
 	ld65 -C nes.cfg -o $@ $< -m map.txt
 	cat map.txt && rm map.txt
 
+install: birthtro.nes
+	open $<
+

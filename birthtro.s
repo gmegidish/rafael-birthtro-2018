@@ -58,8 +58,10 @@ delay: .res 1
 scroll_y: .res 1
 tmp: .res 1
 
-direction: .res 1				; speed*direction of moving face
+direction_x: .res 1				; speed*direction of moving face
+direction_y: .res 1
 face_x: .res 1					; position of left topmost pixel
+face_y: .res 1
 
 frame_counter: .res 1
 
@@ -91,30 +93,8 @@ palette:
 
 sinus:
 	; sin(2 * x * 3.14 / 180) * 16
-	; 0 < x < 180
-	.byt $00, $01, $01, $02, $02, $03, $03
-	.byt $04, $04, $05, $05, $06, $07, $07, $07
-	.byt $08, $08, $09, $09, $0a, $0a, $0b, $0b
-	.byt $0b, $0c, $0c, $0c, $0d, $0d, $0d, $0e
-	.byt $0e, $0e, $0e, $0f, $0f, $0f, $0f, $0f
-	.byt $0f, $0f, $0f, $0f, $0f, $0f, $0f, $0f
-	.byt $0f, $0f, $0f, $0f, $0f, $0f, $0f, $0f
-	.byt $0e, $0e, $0e, $0e, $0d, $0d, $0d, $0c
-	.byt $0c, $0c, $0b, $0b, $0b, $0a, $0a, $09
-	.byt $09, $08, $08, $08, $07, $07, $06, $06
-	.byt $05, $04, $04, $03, $03, $02, $02, $01
-	.byt $01, $00, $00, $00, $ff, $ff, $fe, $fe
-	.byt $fd, $fd, $fc, $fc, $fb, $fb, $fa, $fa
-	.byt $f9, $f9, $f8, $f8, $f7, $f7, $f6, $f6
-	.byt $f5, $f5, $f5, $f4, $f4, $f4, $f3, $f3
-	.byt $f3, $f2, $f2, $f2, $f2, $f1, $f1, $f1
-	.byt $f1, $f1, $f1, $f1, $f1, $f1, $f1, $f1
-	.byt $f1, $f1, $f1, $f1, $f1, $f1, $f1, $f1
-	.byt $f1, $f1, $f2, $f2, $f2, $f2, $f3, $f3
-	.byt $f3, $f4, $f4, $f4, $f5, $f5, $f5, $f6
-	.byt $f6, $f7, $f7, $f8, $f8, $f8, $f9, $f9
-	.byt $fa, $fa, $fb, $fc, $fc, $fd, $fd, $fe
-	.byt $fe, $ff, $ff, $00
+	; 0 <= x < 180
+	.incbin "sinwave.dat"
 
 name_table:
 	.incbin "tileset.nam"
@@ -152,10 +132,12 @@ reset:
 	sta delay
 	sta scroll_y
 	sta frame_counter
+	sta face_y		; we start at the top
 	sta face_x		; we start on the left
 
 	lda #2			; we start by moving right
-	sta direction
+	sta direction_x
+	sta direction_y
 
 	bit PPU_STATUS		; ack vblank nmi
 	bit APU_CHAN_CTRL	; ack dmc irq
@@ -242,18 +224,31 @@ vblank:
 move_head:
 	clc
 	lda face_x
-	adc direction
+	adc direction_x
 	sta face_x
-
 	bne :+
 	lda #2
-	sta direction
-	rts
+	sta direction_x
+	jmp move_y
 :	cmp #256-64
 	beq :+
+	jmp move_y
+:	lda #256-2
+	sta direction_x
+
+move_y:	clc
+	lda face_y
+	adc direction_y
+	sta face_y
+	bne :+
+	lda #2
+	sta direction_y
 	rts
-:	lda #$fe
-	sta direction
+:	cmp #240-96
+	beq :+
+	rts
+:	lda #256-2
+	sta direction_y
 	rts
 
 update_sprites:
@@ -263,15 +258,10 @@ update_sprites:
 	adc face_x
 	sta spritelist+3,x
 
-	stx tmp			; spr.y = original.y+sinus[frame_counter]
-	ldx frame_counter
-	lda sinus,x
-	asl
-	ldx tmp
-	clc
-	adc #80
-	adc rom_spritelist+0,x
+	lda rom_spritelist+0,x
+	adc face_y
 	sta spritelist+0,x
+
 	inx
 	inx
 	inx
